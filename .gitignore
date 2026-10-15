@@ -1,0 +1,38 @@
+# ---- 账本数据：每个���每个人的，必须忽略 ----
+db/*.db
+db/*.db-wal
+db/*.db-shm
+db/*.sqlite
+db/*.sqlite3
+db/backups/
+
+# ---- 真实账单原始文件：绝不入库 ----
+*.xlsx
+*.csv
+*.zip
+!db/schema.sql
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# ---- 前端 ----
+node_modules/
+dist/
+.vite/
+*.local
+.env
+.env.*
+!.env.example
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp

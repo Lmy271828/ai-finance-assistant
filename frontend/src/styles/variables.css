@@ -1,0 +1,64 @@
+/* ============================================================================
+ *  设计变量 —— 定色板和间距刻度，不定具体布局
+ *
+ *  为什么要统一：三个人各自挑颜色，最后支出红会有三个版本。
+ *  用法：<div class="card" style="color: var(--color-expense)">
+ * ========================================================================== */
+
+:root {
+  /* --- 语义色 --- */
+  --color-expense: #e5484d;
+  --color-income: #30a46c;
+  --color-bg: #f5f6f8;
+  --color-card: #ffffff;
+  --color-border: #e4e6eb;
+  --color-text: #1c1e21;
+  --color-muted: #8b8d98;
+
+  /* --- 间距刻度，只允许用这 4 档 --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+
+  /* --- 圆角 --- */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  /* --- 字号 --- */
+  --font-xs: 12px;
+  --font-sm: 14px;
+  --font-md: 16px;
+  --font-lg: 20px;
+  --font-xl: 28px;
+
+  /* --- 图表配色序列（ECharts 用）--- */
+  --chart-1: #3b82f6;
+  --chart-2: #8b5cf6;
+  --chart-3: #f59e0b;
+  --chart-4: #10b981;
+  --chart-5: #ef4444;
+  --chart-6: #06b6d4;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--font-sm);
+}
+
+.card {
+  background: var(--color-card);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+}
