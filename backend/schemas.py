@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # ============================================================================
 #  公共枚举
@@ -263,7 +263,14 @@ class OverrideIn(BaseModel):
     ⚠️⚠️ 这里【没有】任何原始字段名 —— amount / tx_time / direction 等
     一个都没有。这不是遗漏，是刻意的：
     MCP 客户端靠这个模型生成工具 schema，AI 从协议层面就传不进来。
+
+    extra="forbid" 的作用：Pydantic 默认会【静默丢弃】未声明字段。
+    如果不禁止，别人传 {"manual_category": "x", "amount": 99999} 会
+    得到一个「成功」响应 —— 分类改了，金额被悄悄忽略，调用方以为生效了。
+    禁止之后这类请求在入口就被拒，并明确指出是哪个字段非法。
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     manual_category: str | None = Field(default=None, description="手动大类")
     manual_subcat: str | None = Field(default=None, description="手动小类")
