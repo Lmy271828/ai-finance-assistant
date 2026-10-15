@@ -106,9 +106,9 @@ updated_by = 'mcp'   AI 改的
 
 ```
 AI → query_summary(type=expense, period=month, value=2026-09)
-    ← {"total": 1906.85, "prev": 2791.43, "delta": -884.58,
-       "rate": -31.7, "count": 81}
-AI → "9月支出 1906.85 元，共 81 笔，比 8 月少花了 884.58 元（降 31.7%）。"
+    ← {"total": 1900.00, "prev": 2800.00, "delta": -884.58,
+       "rate": -31.7, "count": 61}
+AI → "9月支出 1900.00 元，共 81 笔，比 8 月少花了 884.58 元（降 31.7%）。"
 ```
 
 **注意最后一步**：措辞是 AI 决定的，**数字是后端算的**。
@@ -122,7 +122,7 @@ AI → query_by_category(...)
     ← {"majors": [{"major": "商户消费", "count": 707, ...}]}
 
 AI（对话）→ "商户消费占 55%，太粗了，能拆细吗？"
-用户 → "把美团、麦当劳、肯德基归到餐饮美食"
+用户 → "把美团、某快餐、某快餐归到餐饮美食"
 
 AI → set_override(tx_id=1, manual_category="餐饮美食")
     ← {"tx_id": 1, "manual_category": "餐饮美食", "updated_by": "mcp"}

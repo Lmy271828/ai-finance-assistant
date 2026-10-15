@@ -40,11 +40,11 @@ const props = defineProps<{
 
 // ── 假数据，接真实接口后删掉 ──────────────────────────
 const MOCK_SUMMARY = {
-  total: 3573.67,
-  prev: 3050.2,
-  delta: 523.47,
-  rate: 17.2,
-  count: 180,
+  total: 1900.00,
+  prev: 2800.00,
+  delta: -900.00,
+  rate: -32.1,
+  count: 82,
 }
 const MOCK_CALENDAR = [
   { date: '2026-09-01', amount: 720.5, count: 8 },
@@ -54,38 +54,38 @@ const MOCK_CALENDAR = [
 ]
 const MOCK_TREND = {
   bars: [
-    { label: '2026-05', amount: 2382.17 },
-    { label: '2026-06', amount: 4425.08 },
-    { label: '2026-07', amount: 3052.2 },
-    { label: '2026-08', amount: 3031.57 },
-    { label: '2026-09', amount: 3573.67 },
+    { label: '2026-05', amount: 2100.00 },
+    { label: '2026-06', amount: 3200.00 },
+    { label: '2026-07', amount: 1500.00 },
+    { label: '2026-08', amount: 2800.00 },
+    { label: '2026-09', amount: 1900.00 },
   ],
-  avg: 3292.94,
+  avg: 2300.00,
 }
 const MOCK_CATEGORY = {
-  total: 3573.67,
+  total: 1900.00,
   majors: [
     {
       major: '餐饮',
-      amount: 892.5,
-      pct: 25.0,
+      amount: 800.00,
+      pct: 42.1,
       minors: [
-        { minor: '美团', amount: 312.0, pct: 8.7 },
-        { minor: '麦当劳', amount: 185.5, pct: 5.2 },
+        { minor: '美团', amount: 300.00, pct: 15.8 },
+        { minor: '某快餐', amount: 200.00, pct: 10.5 },
       ],
     },
     // ⚠️ minors 为空数组时，前端必须容错，不能 .map 崩掉
-    { major: '购物', amount: 210.0, pct: 5.9, minors: [] },
+    { major: '购物', amount: 150.00, pct: 7.9, minors: [] },
   ],
 }
 const MOCK_METHOD = [
-  { pay_method: '花呗', amount: 598.45, count: 6 },
-  { pay_method: '[银行]储蓄卡', amount: 298.53, count: 1 },
-  { pay_method: '亲情卡', amount: 299.99, count: 11 },
+  { pay_method: '花呗', amount: 500.00, count: 6 },
+  { pay_method: '储蓄卡(1234)', amount: 300.00, count: 1 },
+  { pay_method: '亲情卡', amount: 300.00, count: 11 },
 ]
 const MOCK_RANK = [
-  { tx_id: 7, amount: 360.0, tx_time: '2026-09-06 14:49', counterparty: '[亲友A]', tx_type: '转账红包' },
-  { tx_id: 19, amount: 200.0, tx_time: '2026-09-12 23:24', counterparty: '[亲友B]', tx_type: '转账红包' },
+  { tx_id: 7, amount: 800.0, tx_time: '2026-09-06 14:49', counterparty: '[亲友A]', tx_type: '转账红包' },
+  { tx_id: 19, amount: 500.0, tx_time: '2026-09-12 23:24', counterparty: '[亲友B]', tx_type: '转账红包' },
 ]
 
 const isIncome = () => props.type === 'income'
@@ -139,7 +139,7 @@ const fmt = (n: number) => n.toFixed(2)
         <h3>趋势（近5期）</h3>
         <div class="bars">
           <div v-for="b in MOCK_TREND.bars" :key="b.label" class="bar-item">
-            <div class="bar" :style="{ height: (b.amount / 4425.08) * 100 + 'px' }" />
+            <div class="bar" :style="{ height: (b.amount / 3200.00) * 100 + 'px' }" />
             <small>{{ b.label.slice(5) }}</small>
           </div>
         </div>

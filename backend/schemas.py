@@ -150,7 +150,7 @@ class TrendResp(BaseModel):
 class MinorGroup(BaseModel):
     minor: str = Field(description="小类名。无细分时上游不会产生本项")
     amount: float = Field(description="小类合计（元）")
-    pct: float = Field(description="占周期总额百分比，8.7 表示 8.7%")
+    pct: float = Field(description="占周期总额百分比，15.8 表示 15.8%")
     count: int = Field(description="小类笔数")
     tx_ids: list[int] = Field(
         description="该小类下的 tx_id 列表，供前端点击跳转明细。"
@@ -297,16 +297,17 @@ class TxDetailResp(BaseModel):
 # ============================================================================
 #  样例数据 —— 队友对着这个看，比看文档快
 #
-#  全部取自真实账本口径（已打码）
+#  ⚠️ 全部为虚构示例数据，不含任何真实账本信息。
+#     格式、单位、精度、空值约定均为真，只是数字是编的。
 # ============================================================================
 
 EXAMPLE_SUMMARY = {
     "period": "2026-09",
-    "total": 3573.67,
-    "prev": 3050.20,
-    "delta": 523.47,
-    "rate": 17.2,          # 17.2 就是 +17.2%，不是 0.172
-    "count": 180,          # 笔数，不是天数
+    "total": 1900.00,
+    "prev": 2800.00,
+    "delta": -900.00,
+    "rate": -32.1,          # -32.1 就是 -32.1%，不是 -0.321
+    "count": 82,            # 笔数，不是天数
 }
 
 EXAMPLE_CALENDAR = {
@@ -321,35 +322,36 @@ EXAMPLE_CALENDAR = {
 
 EXAMPLE_TREND = {
     "bars": [
-        {"label": "2026-05", "amount": 2382.17, "count": 145},
-        {"label": "2026-06", "amount": 4425.08, "count": 271},
-        {"label": "2026-07", "amount": 3052.20, "count": 188},
-        {"label": "2026-08", "amount": 3031.57, "count": 176},
-        {"label": "2026-09", "amount": 3573.67, "count": 180},
+        {"label": "2026-05", "amount": 2100.00, "count": 145},
+        {"label": "2026-06", "amount": 3200.00, "count": 271},
+        {"label": "2026-07", "amount": 1500.00, "count": 188},
+        {"label": "2026-08", "amount": 2800.00, "count": 176},
+        {"label": "2026-09", "amount": 1900.00, "count": 82},
     ],
-    "avg": 3292.94,         # bars 里 5 个 amount 的算术平均
+    "avg": 2300.00,          # bars 里 5 个 amount 的算术平均 = 11500/5
     "n": 5,
 }
 
 EXAMPLE_CATEGORY = {
-    "total": 3573.67,
+    "total": 1900.00,
     "majors": [
         {
             "major": "餐饮",
-            "amount": 892.50,
-            "pct": 25.0,
-            "count": 52,
+            "amount": 800.00,
+            "pct": 42.1,
+            "count": 45,
             "minors": [
-                {"minor": "美团", "amount": 312.00, "pct": 8.7,
-                 "count": 21, "tx_ids": [1, 5, 9]},
-                {"minor": "麦当劳", "amount": 185.50, "pct": 5.2,
-                 "count": 12, "tx_ids": [23, 41]},
+                {"minor": "美团", "amount": 300.00, "pct": 15.8,
+                 "count": 18, "tx_ids": [1, 5, 9]},
+                {"minor": "某快餐", "amount": 200.00, "pct": 10.5,
+                 "count": 10, "tx_ids": [23, 41]},
             ],
         },
         {
+            # ⚠️ 各 major 的 pct 加起来 < 100，差额是「未匹配到分类」的部分
             "major": "购物",
-            "amount": 210.00,
-            "pct": 5.9,
+            "amount": 150.00,
+            "pct": 7.9,
             "count": 8,
             "minors": [],       # ⚠️ 无小类 → 空列表，不是 null
         },
@@ -358,22 +360,23 @@ EXAMPLE_CATEGORY = {
 
 EXAMPLE_METHOD = {
     "groups": [
-        {"pay_method": "花呗", "amount": 598.45, "count": 6},
-        {"pay_method": "[银行]储蓄卡", "amount": 298.53, "count": 1},
-        {"pay_method": "亲情卡", "amount": 299.99, "count": 11},
-        {"pay_method": "小荷包", "amount": 19.50, "count": 1},
+        {"pay_method": "花呗", "amount": 500.00, "count": 6},
+        {"pay_method": "储蓄卡(1234)", "amount": 300.00, "count": 1},
+        {"pay_method": "亲情卡", "amount": 300.00, "count": 11},
+        {"pay_method": "小荷包", "amount": 20.00, "count": 1},
     ]
 }
 
 EXAMPLE_INCOME_RANK = {
     "items": [
-        {"tx_id": 7, "amount": 360.00, "date": "2026-09-06",
+        {"tx_id": 7, "amount": 800.00, "date": "2026-09-06",
          "tx_time": "2026-09-06 14:49:00",
          "counterparty": "[亲友A]", "tx_type": "转账红包", "source": "支付宝"},
-        {"tx_id": 19, "amount": 200.00, "date": "2026-09-12",
+        {"tx_id": 19, "amount": 500.00, "date": "2026-09-12",
          "tx_time": "2026-09-12 23:24:00",
          "counterparty": "[亲友B]", "tx_type": "转账红包", "source": "支付宝"},
-        {"tx_id": 3, "amount": 114.40, "date": "2026-09-10",
+        # ⚠️ counterparty 为空字符串（有些交易拿不到对方名）
+        {"tx_id": 3, "amount": 300.00, "date": "2026-09-10",
          "tx_time": "2026-09-10 19:16:00",
          "counterparty": "", "tx_type": "转账红包", "source": "微信支付"},
     ]
