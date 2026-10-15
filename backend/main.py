@@ -31,6 +31,16 @@ from backend.importer import ImportResult, parse_file, import_file  # noqa: E402
 from backend.overrides import ForbiddenFieldError, TxNotFound  # noqa: E402
 from backend import schemas as S                              # noqa: E402
 
+# ── 控制台编码容错（Windows 必做）─────────────────────────────
+# Windows 控制台默认 GBK。启动期只要有一个 print 碰到 GBK 编不出的字符
+# （✓、emoji、全角标点……），就会 UnicodeEncodeError 让整个应用起不来。
+# 这里统一兜底：编不出来就替换，绝不让打印把服务干掉。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:      # 非标准流（被测试捕获等）直接跳过
+        pass
+
 app = FastAPI(
     title="AI Finance Assistant",
     description="跨平台账单导入 · 可追溯 preset 报告 · MCP 接入",
@@ -48,10 +58,31 @@ app.add_middleware(
 
 # ── 生命周期 ────────────────────────────────────────────────
 
+@app.get("/health", tags=["meta"])
+def health() -> dict:
+    """存活探针。前端/脚本/部署平台靠它判断后端是否起来了。
+
+    刻意放在 /health 而不是 /api/health —— 它不是业务接口，
+    不该出现在 /docs 的业务列表里被当成"第 13 个接口"。
+    """
+    conn = db.get_conn()
+    try:
+        total = conn.execute("SELECT COUNT(*) c FROM transactions_raw").fetchone()["c"]
+        batches = conn.execute("SELECT COUNT(*) c FROM import_batches").fetchone()["c"]
+    finally:
+        conn.close()
+    return {
+        "status": "ok",
+        "db": str(db.DB_PATH),
+        "transactions": total,
+        "batches": batches,
+    }
+
 @app.on_event("startup")
 def _startup() -> None:
     db.init_db()
-    print(f"✓ 数据库已就绪：{db.DB_PATH}")
+    # 用 [OK] 而不是 ✓：Windows 控制台默认 GBK，✓ 编不出来。
+    print(f"[OK] 数据库已就绪: {db.DB_PATH}")
 
 
 # ── 统一错误响应 ────────────────────────────────────────────

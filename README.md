@@ -4,172 +4,125 @@ AI 个人财务助手 —— 围绕用户自己的算账逻辑打造的财务工
 
 ---
 
-## 当前进度
+## 跑起来
 
-**2026-10-15**
+**第一次 / 换电脑：**
 
-### 三个目标功能的完成度
-
-| 功能 | 状态 | 说明 |
-|---|---|---|
-| **① 跨平台账单导入** | 🟡 **微信已实测通过** | 1058 笔真实数据，与账单自报汇总**分毫不差** |
-| | ⚠️ 支付宝未验证 | 代码已写，卡在 ZIP 密码，**未跑过一次** |
-| | ⬜ 第三方平台 | 架构已设计（YAML 配置驱动），未实现 |
-| **② 生成 preset 报告** | ✅ **7 个接口全部跑通** | 真起 uvicorn 实测，排序/精度/空值约定逐条验证 |
-| **③ MCP 接入** | ⬜ 未开始 | 依赖 ①②，均已就绪 |
-
-### 四个核心后端文件（已交付，可直接跑）
-
-```
-backend/
-├── db.py          连接管理 / 事务边界 / 建表 / 统计
-├── schemas.py     12 接口契约 + 字段语义 + 样例数据
-├── overrides.py   ★ 写修正的唯一入口（三道 403 防线）
-└── main.py        FastAPI 入口（12 个路由，零业务逻辑）
+```powershell
+.\scripts\setup.ps1
 ```
 
-**跑起来：**
+**以后每次：**
 
-```bash
-pip install -r requirements.txt
-python -m uvicorn backend.main:app --reload
-# 打开 http://localhost:8000/docs —— 12 个接口可点 Try it out
+```powershell
+.\scripts\start-all.ps1     # 前端 + 后端各开一个窗口
 ```
 
-### 已落地的文件
+| 地址 | 是什么 |
+|---|---|
+| <http://localhost:5173> | 前端页面 |
+| <http://localhost:8000/docs> | 接口文档，可直接 Try it out |
+| <http://localhost:8000/health> | 存活探针 |
 
-```
-db/schema.sql       ✅ 3 表 + 2 视图 + 5 索引（多平台版）
-db/bills.db         ✅ 1058 笔微信真实数据（已对账）
+单独启动 / 出问题：
 
-backend/
-├── db.py           ✅
-├── schemas.py      ✅
-├── overrides.py    ✅ 三道 403 防线
-├── main.py         ✅ 12 路由
-├── importer/       ✅ wechat 实测 / alipay 待验
-└── reports/        ✅ 7 个组件 + _common.py
-
-frontend/           ✅ 3 页骨架 + data-component 标记
-requirements.txt    ✅
+```powershell
+.\scripts\start-backend.ps1     # 只起后端 (8000)
+.\scripts\start-frontend.ps1    # 只起前端 (5173)
+.\scripts\check.ps1             # 自检：缺什么、哪个服务没起来
 ```
 
-### 已验证的事实
+### 三个坑（都是实测踩出来的，别改回去）
 
-```
-✅ 微信解析 1058 笔，支出/收入/中性 与账单自报数字分毫不差
-✅ 重复导入 0 写入 / 1058 跳过
-✅ 解析失败 → 整体回滚，一条都没写进去
-✅ 脏值归一化：168 笔 pay_method='/'、大量 remark='/' 处理正确
-✅ 约束生效：CHECK 拦得住负数金额与非法 direction
-✅ 原始层不可变：除 importer/ 外无任何写 transactions_raw 的代码
+**1. 必须用 `.venv`。** `fastapi` 会拽着 `starlette` 一起装。直接 `pip install` 到全局 Anaconda 会把全局 starlette 降级，弄坏别的项目。所有脚本已强制走项目 venv。
 
-✅ 7 个报告接口全部 200，排序/精度/空值约定逐条验证
-✅ avg = bars 的算术平均（不是 total/n）
-✅ pct 之和 ≤ 100（差额是未分类部分）
-✅ 日历不返回 amount=0 的空日期，按日期升序
-✅ 脏参数在入口被挡 → 400
+**2. 前端必须在后端跑着的时候开。** 前端写相对路径 `/api/xxx`，靠 `vite.config.ts` 的 proxy 转发到 8000。**代码里不允许硬编码 `http://localhost:8000`** —— 开发能跑，部署必挂。
 
-✅ 403 防线：amount / tx_time / direction / raw_json 全部 403
-✅ 混传「修正+原始」也 403
-✅ 改一笔 → 视图分类变化，transactions_raw 一个字节没动
-✅ updated_by 正确记录入口（ui / mcp）
-✅ 撤销修正 → 报告恢复原状
-```
-
-### 运行中发现并修掉的两个真 bug
-
-| bug | 症状 | 修法 |
-|---|---|---|
-| `TxItem.direction` 声明英文枚举但库里存中文 | 明细接口 500 | `_common.type_of()` 映射 |
-| Pydantic 默认**静默丢弃**未知字段 | 传 `amount` 返回 **200** 而非 403 | `OverrideIn` 加 `extra="forbid"` + 入口识别原始字段名返回 403 |
-
-第二个不真跑一次绝对发现不了 —— 数据没被改（安全底线还在），但**招牌行为没发生**，调用方还会收到误导的成功响应。
+**3. Windows 编码。** 本项目所有 `.ps1` 必须是 **UTF-8 with BOM**（PowerShell 5.1 按 GBK 读，无 BOM 会乱码）；`requirements.txt` 同理。改脚本时别把 BOM 弄丢。
 
 ---
 
-## 数据通路的形状（重要，别理解错）
+## 当前进度（2026-10-15）
 
-**不是「所有请求先过 schemas.py 再过 overrides.py 才能查数据库」。**
+| 功能 | 状态 |
+|---|---|
+| ① 跨平台账单导入 | 🟡 微信已实测通过（1058 笔，与账单自报汇总分毫不差）；支付宝已写未验证（缺 ZIP 密码）；其他平台未开始 |
+| ② 生成 preset 报告 | ✅ 7 个接口全部跑通 |
+| ③ MCP 接入 | ⬜ 未开始，依赖 ①② |
+
+---
+
+## 必须先看懂的一件事：三条通道
+
+**不是「请求先过 schemas.py 再过 overrides.py 才能查库」。**
 `schemas.py` 不碰数据库，它只是 HTTP/MCP 边界的类型校验。
 
-真实的结构是**三条独立通道，各有唯一的门**：
+真实结构是**三条独立通道，各有唯一的门**：
 
-| 通道 | 唯一入口 | 管什么 | 谁能走 |
-|---|---|---|---|
-| **写原始层** | `backend/importer/` | 只能 INSERT，绝不 UPDATE | 导入账单 |
-| **写修正层** | `backend/overrides.py` | UPSERT + 三道 403 | 前端改分类 / AI 改分类 |
-| **读** | `backend/reports/*.py` | 纯 SELECT，查 `v_tx` 视图 | 所有查询 |
+| 通道 | 唯一入口 | 能做什么 |
+|---|---|---|
+| 写原始层 | `backend/importer/` | 只能 INSERT，**绝不 UPDATE** |
+| 写修正层 | `backend/overrides.py` | UPSERT + 三道 403 防线 |
+| 读 | `backend/reports/*.py` | 纯 SELECT，查 `v_tx` 视图 |
 
 查询**不经过** `overrides.py` —— 它只管「改」，不管「读」。
 
----
+### 由此推出的三条硬约束
 
-## 三条不可动摇的约束
-
-### 1. 原始凭证不可涂改
+**1. 原始凭证不可涂改。**
 
 ```
 transactions_raw   导入时 INSERT，之后永不 UPDATE
 tx_overrides       所有修正落这里
 ```
 
-代码级证据：`grep -r "UPDATE transactions_raw"` 全项目零命中（除 importer）。
+`grep -r "UPDATE transactions_raw"` 全项目零命中。想改分类，走 `overrides.py`。
 
-### 2. 前端和 AI 走同一条路
+**2. 前端和 AI 必须走同一条路。** 否则会出现「前端显示 A，AI 算出 B」，口径立刻分裂。
 
-```
-前端 PATCH ─┐
-            ├─→ overrides.set_override()
-MCP tool ───┘
-```
+**3. 数字由后端算，措辞由 AI 决定。** MCP 拿到的数字来自 SQL，AI 改不了它，只能决定怎么措辞。
 
-否则会出现「前端显示 A，AI 算出 B」，口径立刻分裂。
+---
 
-### 3. 数字由后端算，措辞由 AI 决定
+## 目录
 
 ```
-MCP → query_summary() → {"total": 1900.00, ...} → AI 决定怎么措辞
+db/schema.sql          3 表 + 2 视图 + 5 索引
+backend/
+  db.py                连接管理 / 事务边界 / 建表
+  schemas.py           13 个接口的契约 + 字段语义 + 样例
+  overrides.py         ★ 写修正的唯一入口
+  main.py              FastAPI 入口（零业务逻辑）
+  importer/            账单解析（wechat 已验证 / alipay 待验）
+  reports/             7 个报告组件
+frontend/src/views/    3 页骨架（账单 / 导入 / 改单）
+scripts/               setup / start-all / start-*-* / check
+docs/设计/             设计文档
 ```
 
-AI 改不了数字，因为数字来自 SQL。
+`db/bills.db` 是各自的本地账本，不入库（gitignored）。
+
+---
+
+## 文档
+
+| 文档 | 什么时候看 |
+|---|---|
+| `docs/设计/系统设计.md` | 长期愿景与问题定义 |
+| `docs/设计/第一轮/00_整体架构.md` | 三条通道为什么这么分 |
+| `01_数据库.md` | 表结构与去重、事务设计 |
+| `02_后端.md` | 三个核心文件各自解决什么 |
+| `03_前端.md` | 骨架结构与分工边界 |
+| `04_MCP.md` | MCP 层的边界与安全 |
+| `1-1_导入.md` / `1-2_生成报告.md` / `1-3_MCP接入.md` | 三个功能各自的目标与进度 |
 
 ---
 
 ## 下一步
 
-| 优先级 | 事项 | 谁做 |
-|---|---|---|
-| 1 | `mcp/server.py` —— 11 个工具 | 你 |
-| 2 | 支付宝导入验证 | 需要密码 |
-| 3 | 第三方平台 YAML 适配器 | 分到导入功能的人 |
-| 4 | `frontend/components/` 9 个组件 | 队友 |
-
----
-
-## 文档结构
-
-```
-docs/设计/
-├── 系统设计.md          ← 问题定义与核心理念，长期有效
-└── 第一轮/
-    ├── 00_整体架构.md    三条通道各有一个唯一的门
-    ├── 01_数据库.md      schema.sql + db.py 的设计思路
-    ├── 02_后端.md        schemas / overrides / main 各自解决什么
-    ├── 03_前端.md        骨架结构与分工边界
-    ├── 04_MCP.md         MCP 层的边界与安全
-    │
-    ├── 1-1_导入.md       功能一：跨平台账单导入
-    ├── 1-2_生成报告.md   功能二：preset 报告
-    └── 1-3_MCP接入.md    功能三：AI 接入
-
-docs/归档/v0/            ← 上一版设计文档
-```
-
----
-
-## 相关资源
-
-`E:/Ufolder/Current/ActionSys/Hgclass/CSSE/proj/正式方案/` 下有：
-- `调研/` —— 三份调研报告（平台功能 / AI产品 / 学术文献）
-- `归档/` —— 队友交付的 webapp 原型、demo 代码、PPT 文档
+| 事项 | 谁做 |
+|---|---|
+| `mcp/server.py` —— 11 个工具 | 你 |
+| 支付宝导入验证 | 需要解压密码 |
+| 第三方平台适配（美团 / 银行卡 / 电商） | 分到导入功能的人 |
+| `frontend/components/` 9 个组件 | 队友 |
