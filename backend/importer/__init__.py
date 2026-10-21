@@ -19,7 +19,7 @@ from typing import Callable, Iterator
 
 from .. import db
 from . import alipay, wechat
-from .base import INSERT_SQL, Row
+from .base import INSERT_SQL, ParseIssues, Row
 
 
 @dataclass
@@ -79,7 +79,8 @@ def detect(path: Path, alipay_password: str | None = None) -> tuple[str, float]:
 
 
 def parse_file(path: Path, platform_id: str | None = None,
-               alipay_password: str | None = None) -> list[Row]:
+               alipay_password: str | None = None,
+               issues: ParseIssues | None = None) -> list[Row]:
     """解析文件为 Row 列表。不写库。"""
     path = Path(path)
     if not path.exists():
@@ -94,9 +95,9 @@ def parse_file(path: Path, platform_id: str | None = None,
         raise ValueError(f"未支持的平台：{pid}")
 
     if pid == "alipay":
-        return list(alipay.parse(path, password=alipay_password))
+        return list(alipay.parse(path, password=alipay_password, issues=issues))
 
-    return list(parser(path))
+    return list(parser(path, issues=issues))
 
 
 def import_file(path: Path, platform_id: str | None = None,
@@ -107,8 +108,9 @@ def import_file(path: Path, platform_id: str | None = None,
     if platform_id:
         pid = platform_id
 
+    issues = ParseIssues()
     try:
-        rows = parse_file(path, pid, alipay_password)
+        rows = parse_file(path, pid, alipay_password, issues=issues)
     except Exception as e:
         raise ValueError(f"解析失败：{e}") from e
 
@@ -145,8 +147,8 @@ def import_file(path: Path, platform_id: str | None = None,
                 "INSERT INTO import_batches "
                 "(batch_id, platform_id, filename, total, inserted, skipped,"
                 " failed, date_from, date_to) VALUES (?,?,?,?,?,?,?,?,?)",
-                (batch_id, pid, path.name, len(rows), inserted, skipped,
-                 0, min(dates), max(dates)),
+                (batch_id, pid, path.name, len(rows) + issues.failed, inserted, skipped,
+                 issues.failed, min(dates), max(dates)),
             )
     except Exception:
         conn.close()
@@ -155,6 +157,7 @@ def import_file(path: Path, platform_id: str | None = None,
 
     return ImportResult(
         batch_id=batch_id, platform_id=pid, platform_name=name,
-        total=len(rows), inserted=inserted, skipped=skipped, failed=0,
-        first_error=None, date_from=min(dates), date_to=max(dates),
+        total=len(rows) + issues.failed, inserted=inserted, skipped=skipped,
+        failed=issues.failed, first_error=issues.first_error,
+        date_from=min(dates), date_to=max(dates),
     )

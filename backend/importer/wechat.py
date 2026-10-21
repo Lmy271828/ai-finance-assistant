@@ -21,6 +21,7 @@ from typing import Iterator
 import openpyxl
 
 from .base import (
+    ParseIssues,
     Row,
     clean,
     norm_amount,
@@ -57,7 +58,7 @@ def find_header_row(ws, max_scan: int = 40) -> int:
     raise ValueError("未找到表头行：前 40 行内没有 '交易时间'")
 
 
-def parse(path: Path) -> Iterator[Row]:
+def parse(path: Path, issues: ParseIssues | None = None) -> Iterator[Row]:
     """解析微信 xlsx，产出归一化 Row。"""
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
@@ -76,7 +77,9 @@ def parse(path: Path) -> Iterator[Row]:
         if missing:
             raise ValueError(f"微信账单缺少必需列: {missing}")
 
-        for raw_row in ws.iter_rows(min_row=hdr_idx + 2, values_only=True):
+        for line_number, raw_row in enumerate(
+            ws.iter_rows(min_row=hdr_idx + 2, values_only=True), start=hdr_idx + 2
+        ):
             if not raw_row or raw_row[0] is None:
                 continue
 
@@ -91,6 +94,9 @@ def parse(path: Path) -> Iterator[Row]:
             tx_time = norm_time(get("tx_time"))
             amount = norm_amount(get("amount"))
             if tx_time is None or amount is None:
+                if issues is not None:
+                    reason = "交易时间无效" if tx_time is None else "金额无效或不大于零"
+                    issues.add(line_number, reason)
                 continue
 
             raw_dict = {
