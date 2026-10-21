@@ -19,7 +19,7 @@ import zipfile
 from pathlib import Path
 from typing import Iterator
 
-from .base import Row, clean, norm_amount, norm_direction, norm_time, should_drop
+from .base import ParseIssues, Row, clean, norm_amount, norm_direction, norm_time, should_drop
 
 # 支付宝列名变体 → 统一字段名
 HEADER_MAP = {
@@ -69,17 +69,37 @@ def find_header_row(lines: list[str], max_scan: int = 40) -> int:
     raise ValueError("未找到支付宝表头行")
 
 
-def parse(path: Path, password: str | None = None) -> Iterator[Row]:
+def parse(path: Path, password: str | None = None,
+          issues: ParseIssues | None = None) -> Iterator[Row]:
     """解析支付宝 .zip 或 .csv。"""
     path = Path(path)
 
     # ── 1. 取 CSV 字节内容 ──────────────────────────────────
     if path.suffix.lower() == ".zip":
-        with zipfile.ZipFile(path) as zf:
-            names = [n for n in zf.namelist() if n.lower().endswith(".csv")]
-            if not names:
-                raise ValueError(f"ZIP 内没有 CSV 文件：{zf.namelist()}")
-            data = zf.read(names[0], pwd=(password or "").encode())
+        try:
+            with zipfile.ZipFile(path) as zf:
+                entries = [info for info in zf.infolist()
+                           if not info.is_dir() and info.filename.lower().endswith(".csv")]
+                if not entries:
+                    raise ValueError("支付宝 ZIP 中没有 CSV 文件")
+                info = entries[0]
+                if info.file_size > 30 * 1024 * 1024:
+                    raise ValueError("ZIP 中 CSV 文件解压后超过 30 MB 限制")
+                encrypted = bool(info.flag_bits & 0x1)
+                if encrypted and not password:
+                    raise ValueError("支付宝 ZIP 已加密，请填写解压密码")
+                try:
+                    data = zf.read(info, pwd=password.encode("utf-8") if password else None)
+                except (RuntimeError, NotImplementedError) as exc:
+                    if encrypted:
+                        raise ValueError("支付宝 ZIP 密码错误或加密方式不受支持") from exc
+                    raise ValueError("ZIP 解压失败，压缩方式可能不受支持") from exc
+                except zipfile.BadZipFile as exc:
+                    if encrypted:
+                        raise ValueError("支付宝 ZIP 密码错误或压缩包损坏") from exc
+                    raise ValueError("ZIP 内的 CSV 文件已损坏") from exc
+        except zipfile.BadZipFile as exc:
+            raise ValueError("ZIP 文件已损坏或不是有效的 ZIP 格式") from exc
     else:
         data = path.read_bytes()
 
@@ -114,6 +134,9 @@ def parse(path: Path, password: str | None = None) -> Iterator[Row]:
         tx_time = norm_time(get("tx_time"))
         amount = norm_amount(get("amount"))
         if tx_time is None or amount is None:
+            if issues is not None:
+                reason = "交易时间无效" if tx_time is None else "金额无效或不大于零"
+                issues.add(hdr + reader.line_num, reason)
             continue
 
         yield Row(

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Iterator
@@ -100,12 +101,30 @@ class Row:
         )
 
 
+@dataclass
+class ParseIssues:
+    """解析阶段的数据质量统计；不会包含用户交易字段值。"""
+
+    failed: int = 0
+    first_error: str | None = None
+    warnings: list[str] = field(default_factory=list)
+
+    def add(self, line_number: int, reason: str) -> None:
+        message = f"第 {line_number} 行：{reason}"
+        self.failed += 1
+        if self.first_error is None:
+            self.first_error = message
+        if len(self.warnings) < 5:
+            self.warnings.append(message)
+
+
 INSERT_SQL = """
-INSERT OR IGNORE INTO transactions_raw
+INSERT INTO transactions_raw
   (source, platform_id, tx_time, direction, amount, pay_method,
    counterparty, item, tx_type, status, tx_no, merchant_no, remark,
    date, month, year, weekday, hour, dedupe_key, raw_json, import_batch)
 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+ON CONFLICT(dedupe_key) DO NOTHING
 """
 
 
@@ -125,13 +144,19 @@ def norm_direction(value: Any) -> str:
 
 
 def norm_amount(value: Any) -> float | None:
-    """金额归一化：去 ¥ 和逗号，转 float。失败返回 None（由调用方计数）。"""
-    s = clean(value).replace("¥", "").replace(",", "").replace("元", "")
+    """金额归一化：仅接收有限正数，统一保留两位小数。"""
+    s = clean(value).replace("¥", "").replace("￥", "").replace(",", "").replace("元", "")
     if not s:
         return None
     try:
-        return round(float(s), 2)
-    except ValueError:
+        amount = Decimal(s)
+        if not amount.is_finite():
+            return None
+        amount = amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if amount <= 0:
+            return None
+        return float(amount)
+    except (InvalidOperation, ValueError, OverflowError):
         return None
 
 
