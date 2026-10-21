@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -28,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from backend import db, overrides, reports                    # noqa: E402
 from backend import overrides as overrides_mod                # noqa: E402
 from backend.importer import ImportResult, parse_file, import_file  # noqa: E402
+from backend.importer.base import ParseIssues  # noqa: E402
 from backend.overrides import ForbiddenFieldError, TxNotFound  # noqa: E402
 from backend import schemas as S                              # noqa: E402
 
@@ -122,58 +124,87 @@ def _json_error(code: int, msg: str):
 #  导入
 # ═══════════════════════════════════════════════════════════
 
+# 上传文件仅暂存于随机临时目录，绝不依赖用户文件名作为完整路径。
+# 将原始文件名保留为 basename，平台识别和导入批次仍可使用原文件名。
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+ALLOWED_EXTENSIONS = {".xlsx", ".csv", ".zip"}
+
+
+async def _stage_upload(file: UploadFile, target_dir: Path) -> Path:
+    name = Path((file.filename or "").replace("\\", "/")).name
+    if not name or Path(name).suffix.lower() not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, "请上传 .xlsx、.csv 或 .zip 格式的账单")
+
+    target = target_dir / name
+    size = 0
+    with target.open("wb") as stream:
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_UPLOAD_BYTES:
+                raise HTTPException(413, "账单文件超过 25 MB 限制")
+            stream.write(chunk)
+    if size == 0:
+        raise HTTPException(400, "上传文件为空")
+    return target
+
+
 @app.post("/api/import/preview", response_model=S.ImportPreviewResp)
-async def import_preview(file: UploadFile = File(...)):
-    """解析文件但不入库。确认后再调 commit。"""
-    tmp = Path(db.DB_DIR) / f"_upload_{file.filename}"
-    try:
-        tmp.write_bytes(await file.read())
-        rows = parse_file(tmp)
-        if not rows:
-            raise HTTPException(400, "解析成功但没有任何有效数据行")
+async def import_preview(
+    file: UploadFile = File(...),
+    alipay_password: str | None = Form(None),
+):
+    """解析但不写库。支付宝加密 ZIP 可通过 multipart 表单传密码。"""
+    with TemporaryDirectory(prefix="finance_import_") as temp_dir:
+        tmp = await _stage_upload(file, Path(temp_dir))
+        try:
+            issues = ParseIssues()
+            rows = parse_file(tmp, alipay_password=alipay_password, issues=issues)
+            if not rows:
+                raise HTTPException(400, "解析成功但没有任何有效数据行")
 
-        dates = sorted(r.date for r in rows)
-        by_status: dict[str, int] = {}
-        by_direction: dict[str, int] = {}
-        for r in rows:
-            by_status[r.status or "未知"] = by_status.get(r.status or "未知", 0) + 1
-            by_direction[r.direction] = by_direction.get(r.direction, 0) + 1
+            dates = sorted(r.date for r in rows)
+            by_status: dict[str, int] = {}
+            by_direction: dict[str, int] = {}
+            for r in rows:
+                by_status[r.status or "未知"] = by_status.get(r.status or "未知", 0) + 1
+                by_direction[r.direction] = by_direction.get(r.direction, 0) + 1
 
-        first = rows[0]
-        return S.ImportPreviewResp(
-            batch_id="preview",
-            platform_id=first.platform_id,
-            platform_name=first.source,
-            confidence=0.98,
-            total=len(rows),
-            by_status=by_status,
-            by_direction=by_direction,
-            date_from=dates[0],
-            date_to=dates[-1],
-            amount_sum=round(sum(r.amount for r in rows if r.direction == "支出"), 2),
-            sample=[r.raw for r in rows[:5]],
-            warnings=[],
-        )
-    finally:
-        tmp.unlink(missing_ok=True)
+            first = rows[0]
+            return S.ImportPreviewResp(
+                batch_id="preview",
+                platform_id=first.platform_id,
+                platform_name=first.source,
+                confidence=0.98,
+                total=len(rows),
+                by_status=by_status,
+                by_direction=by_direction,
+                date_from=dates[0],
+                date_to=dates[-1],
+                amount_sum=round(sum(r.amount for r in rows if r.direction == "支出"), 2),
+                sample=[r.raw for r in rows[:5]],
+                warnings=issues.warnings,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
 
 @app.post("/api/import/commit", response_model=S.ImportCommitResp)
-async def import_commit(file: UploadFile = File(...)):
-    """全事务入库。任何一行失败 → 整体回滚。"""
-    tmp = Path(db.DB_DIR) / f"_upload_{file.filename}"
-    try:
-        tmp.write_bytes(await file.read())
-        r: ImportResult = import_file(tmp)
-        return S.ImportCommitResp(
-            batch_id=r.batch_id, inserted=r.inserted, skipped=r.skipped,
-            failed=r.failed, first_error=r.first_error,
-            date_from=r.date_from, date_to=r.date_to,
-        )
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
-    finally:
-        tmp.unlink(missing_ok=True)
+async def import_commit(
+    file: UploadFile = File(...),
+    alipay_password: str | None = Form(None),
+):
+    """解析后批量入库，沿用已有事务逻辑和去重机制。"""
+    with TemporaryDirectory(prefix="finance_import_") as temp_dir:
+        tmp = await _stage_upload(file, Path(temp_dir))
+        try:
+            r: ImportResult = import_file(tmp, alipay_password=alipay_password)
+            return S.ImportCommitResp(
+                batch_id=r.batch_id, inserted=r.inserted, skipped=r.skipped,
+                failed=r.failed, first_error=r.first_error,
+                date_from=r.date_from, date_to=r.date_to,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
 
 @app.get("/api/import/history")
